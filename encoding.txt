@@ -1,0 +1,68 @@
+	if *showEncoding {
+		// Loop through the tables
+		for rows.Next() {
+			var tableName string
+			err := rows.Scan(&tableName)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Get a list of columns to loop through
+			columns, err := db.Query(fmt.Sprintf("SELECT column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '%s' AND table_schema = '%s' ORDER BY ordinal_position", tableName, *database))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer columns.Close()
+
+			// Loop through the columns
+			for columns.Next() {
+				var columnName string
+				err := columns.Scan(&columnName)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				// Query the column for records that need to be fixed
+				query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`.`%s` WHERE LENGTH(`%s`) != CHAR_LENGTH(`%s`)", *database, tableName, columnName, columnName)
+				var count int
+				err = db.QueryRow(query).Scan(&count)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				// Print the result
+				if count > 0 {
+					fmt.Println()
+					fmt.Printf("Current table: %s\n", color.BlueString(tableName))
+					fmt.Printf("Column: %s\n", color.BlueString(columnName))
+					fmt.Printf("Count of records that need to be fixed: %s\n", color.RedString(fmt.Sprintf("%d", count)))
+					fmt.Println()
+
+					// Compare the latin1 and utf8 encodings visually
+					query = fmt.Sprintf("SELECT CONVERT(CONVERT(`%s` USING BINARY) USING latin1) AS latin1, CONVERT(CONVERT(`%s` USING BINARY) USING utf8) AS utf8 FROM `%s`.`%s` WHERE CONVERT(`%s` USING BINARY) RLIKE CONCAT('[', UNHEX('80'), '-', UNHEX('FF'), ']+')", columnName, columnName, *database, tableName, columnName)
+					rows, err := db.Query(query)
+					if err != nil {
+						log.Fatal(err)
+					}
+					defer rows.Close()
+
+					// Print the result
+					fmt.Println("+-------------------------+----------------+")
+					fmt.Println("| latin1                  | utf8           |")
+					fmt.Println("+-------------------------+----------------+")
+					for rows.Next() {
+						var latin1 string
+						var utf8 string
+						err := rows.Scan(&latin1, &utf8)
+						if err != nil {
+							log.Fatal(err)
+						}
+						fmt.Printf("| %-23s | %-14s |\n", latin1, utf8)
+					}
+					fmt.Println("+-------------------------+----------------+")
+					fmt.Println()
+				}
+			}
+		}
+	}
+}
