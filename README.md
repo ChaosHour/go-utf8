@@ -16,9 +16,3 @@ To use this CLI, you need to run it with the appropriate command line flags. You
 This will output any columns that have non-utf8 encoded data. You can then fix the data by converting the column character set to utf8 using the `ALTER TABLE` statement.
 
 
-
-
-
-[![Build Status](https://travis-ci.org/axgle/go-utf8.svg?branch=master)](https://travis-ci.org/axgle/go-utf8)
-[![GoDoc](https://godoc.org/github.com/axgle/go-utf8?status.svg)](https://godoc.org/github.com/axgle/go-utf8)
-[![Go Report Card](https://goreportcard.com/badge/github.com/axgle/go-utf8)](https://goreportcard.com/report/github.com/axgle/go-utf8)
