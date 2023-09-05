@@ -66,7 +66,12 @@ mysql> SELECT CONVERT(CONVERT(description USING BINARY) USING latin1) AS latin1,
 
 
 
+## reference
 
+- https://oracle-base.com/articles/mysql/mysql-converting-table-character-sets-from-latin1-to-utf8#the-problem
+- https://www.percona.com/blog/utf8-data-on-latin1-tables-converting-to-utf8-without-downtime-or-double-encoding/
+- https://mysql.rjweb.org/doc.php/charcoll#diagnosing_charset_issues
+- https://www.percona.com/blog/fixing-column-encoding-mess-in-mysql/
 
 
 ## How to install
