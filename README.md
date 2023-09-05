@@ -4,6 +4,10 @@
 Checks if utf8 encoded data is being stored in  latin1 columns.
 
 
+
+
+
+
 ## Tetsting
 ```sql
 mysql> SET NAMES latin1;
@@ -59,3 +63,31 @@ mysql> SELECT CONVERT(CONVERT(description USING BINARY) USING latin1) AS latin1,
 
 <img src="screenshots/Screenshot 2023-09-04 at 9.21.40 PM.png" width="1053" height="473" />
 
+
+
+
+
+
+
+## How to install
+```Go
+
+go install github.com/ChaosHour/go-utf8@latest
+
+
+To build:
+
+go build -o go-gtids
+
+FreeBSD:
+env GOOS=freebsd GOARCH=amd64 go build .
+
+On Mac:
+env GOOS=darwin GOARCH=amd64 go build .
+
+Linux:
+env GOOS=linux GOARCH=amd64 go build .
+
+
+
+```
