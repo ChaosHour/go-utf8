@@ -6,7 +6,7 @@ Checks if utf8 encoded data is being stored in  latin1 columns.
 
 
 
-## my.cnf Used for testing
+## ~/my.cnf Used for testing
 ````ini
 
 [mysql]
