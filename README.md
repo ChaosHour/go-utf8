@@ -6,6 +6,39 @@ Checks if utf8 encoded data is being stored in  latin1 columns.
 
 
 
+## my.cnf Used for testing
+````ini
+
+[mysql]
+#default-character-set=latin1
+[client_ps]
+user=root
+password=xxxxx
+host=192.168.50.10
+[client_primary]
+user=dba_util
+password=xxxxx
+host=192.168.50.152
+[client_replica]
+user=dba_util
+password=xxxxx
+host=192.168.50.153
+[client_etlreplica]
+user=dba_util
+password=xxxxx
+host=192.168.50.154
+````
+
+## How to use
+```sql
+You can then use it like so:
+mysql --defaults-group-suffix=_primary -e "SELECT CONVERT(CONVERT(description USING BINARY) USING latin1) AS latin1, CONVERT(CONVERT(description USING BINARY) USING utf8) AS utf8 FROM char_test_db.t1 WHERE CONVERT(description USING BINARY) RLIKE CONCAT('[', UNHEX('60'), '-', UNHEX('FF'), ']')"
++-------------------------+----------------+
+| latin1                  | utf8           |
++-------------------------+----------------+
+| Ã‚Â¡VolcÃƒÂ¡n!          | Â¡VolcÃ¡n!     |
++-------------------------+----------------+
+```
 
 
 ## Tetsting
@@ -57,6 +90,55 @@ mysql> SELECT CONVERT(CONVERT(description USING BINARY) USING latin1) AS latin1,
 1 row in set, 1 warning (0.00 sec)
 
 ```
+
+### How to use the cli
+```go   
+go-utf8 on  main via 🐹 v1.21.0 
+❯ go-utf8
+Usage: go-utf8 -s <source host> [-d <database name>] [-show]
+Please specify a source host
+
+
+
+go-utf8 on  main [!?] via 🐹 v1.21.0 
+❯ go-utf8 -h
+Usage of go-utf8:
+  -d string
+        Database Name
+  -e    Show encoding comparison
+  -s string
+        Source Host
+  -show
+        Show Databases
+
+
+
+go-utf8 on  main [!?] via 🐹 v1.21.0 
+❯ go-utf8 -s primary -show
+Connected to primary (primary): ✔
+
+char_test_db
+information_schema
+mysql
+performance_schema
+sys
+
+
+go-utf8 on  main [!?] via 🐹 v1.21.0 
+❯ go-utf8 -s primary -d char_test_db
+Connected to primary (primary): ✔
+
+
+Current table: t1
+Column: description
+Count of records that need to be fixed: 1
+
+char_test_db   0% [               ]  [0s:0s]
+Table: t1, Collation: utf8mb3_general_ci
+Default character set: utf8mb3
+```
+
+
 
 
 ## Screenshots
