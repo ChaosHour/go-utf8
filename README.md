@@ -8,6 +8,10 @@ Checks if utf8 encoded data is being stored in  latin1 columns.
 
 ## ~/my.cnf Used for testing
 ````ini
+Make sure there are no spaces before and after the = sign.  The spaces will cause the connection to fail.
+Do not use single quotes around the password.  
+
+The single quotes will cause the connection to fail. If you have special characters in your password, you will need to escape them with a backslash.
 
 [mysql]
 #default-character-set=latin1
@@ -43,6 +47,8 @@ mysql --defaults-group-suffix=_primary -e "SELECT CONVERT(CONVERT(description US
 
 ## Tetsting
 ```sql
+Using queries from https://www.percona.com/blog/utf8-data-on-latin1-tables-converting-to-utf8-without-downtime-or-double-encoding/
+
 mysql> SET NAMES latin1;
 Query OK, 0 rows affected (0.00 sec)
 
@@ -95,7 +101,7 @@ mysql> SELECT CONVERT(CONVERT(description USING BINARY) USING latin1) AS latin1,
 ```go   
 go-utf8 on  main via 🐹 v1.21.0 
 ❯ go-utf8
-Usage: go-utf8 -s <source host> [-d <database name>] [-show]
+Usage: go-utf8 -s <source host> [-d <database name>] [-show] [-t <table name>]
 Please specify a source host
 
 
@@ -105,11 +111,12 @@ go-utf8 on  main [!?] via 🐹 v1.21.0
 Usage of go-utf8:
   -d string
         Database Name
-  -e    Show encoding comparison
   -s string
         Source Host
   -show
         Show Databases
+  -t string
+        Select table
 
 
 
@@ -130,21 +137,28 @@ Connected to primary (primary): ✔
 
 
 Current table: t1
-Column: description
+Column: name
+Count of records that need to be fixed: 18
+
+
+Current table: t1
+Column: address1
+Count of records that need to be fixed: 42
+
+
+Current table: t1
+Column: address2
 Count of records that need to be fixed: 1
 
-char_test_db   0% [               ]  [0s:0s]
-Table: t1, Collation: utf8mb3_general_ci
-Default character set: utf8mb3
+
+go-utf8 on  main [!?] via 🐹 v1.21.0 
+❯ go-utf8 -s primary -d char_test_db -t t1
+Connected to primary (primary): ✔
+
+Default character set: utf8
+Default collation: utf8_unicode_ci
+
 ```
-
-
-
-
-## Screenshots
-
-<img src="screenshots/Screenshot 2023-09-04 at 9.21.40 PM.png" width="1053" height="473" />
-
 
 
 
