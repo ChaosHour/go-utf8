@@ -160,7 +160,7 @@ Default collation: utf8_unicode_ci
 
 
 Scan a single table:
-go-utf8 -s ChaosHour.com -d au_op -t Ads -scan
+go-utf8 -s ChaosHour.com -d chaos -t Ads -scan
 Connected to ChaosHour.com (localhost): ✔
 
 Current table: Ads
