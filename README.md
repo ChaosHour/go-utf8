@@ -158,6 +158,17 @@ Connected to primary (primary): ✔
 Default character set: utf8
 Default collation: utf8_unicode_ci
 
+
+Scan a single table:
+go-utf8 -s ChaosHour.com -d au_op -t Ads -scan
+Connected to ChaosHour.com (localhost): ✔
+
+Current table: Ads
+Column: add_phone
+Count of records that need to be fixed: 8
+
+Offending IDs:
+[17454 23951 27531 34206 35838 39497 39889 44513]
 ```
 
 

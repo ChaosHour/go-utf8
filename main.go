@@ -60,14 +60,9 @@ func connectToDatabase(source string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Print the result
-	if err == nil {
-		fmt.Printf("Connected to %s (%s): %s\n", source, hostname, color.GreenString("✔"))
-		fmt.Println()
-	} else {
-		fmt.Printf("Failed to connect to %s (%s): %s\n", source, hostname, color.RedString("✘"))
-		fmt.Println()
-	}
+	// Print the result (simplified)
+	fmt.Printf("Connected to %s (%s): %s\n", source, hostname, color.GreenString("✔"))
+	fmt.Println()
 
 	return db, nil
 }
