@@ -178,7 +178,7 @@ go install github.com/ChaosHour/go-utf8@latest
 
 To build:
 
-go build -o go-gtids
+go build -o go-utf8
 
 FreeBSD:
 env GOOS=freebsd GOARCH=amd64 go build .

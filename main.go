@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/fatih/color"
@@ -18,11 +19,11 @@ import (
 
 // Define flags
 var (
-	source   = flag.String("s", "", "Source Host")
-	database = flag.String("d", "", "Database Name")
-	//showEncoding = flag.Bool("e", false, "Show encoding comparison")
-	table = flag.String("t", "", "Select table")
-	show  = flag.Bool("show", false, "Show Databases")
+	source    = flag.String("s", "", "Source Host")
+	database  = flag.String("d", "", "Database Name")
+	table     = flag.String("t", "", "Select table")
+	show      = flag.Bool("show", false, "Show Databases")
+	scanTable = flag.Bool("scan", false, "Scan specific table")
 )
 
 // read the ~/.my.cnf file to get the database credentials
@@ -82,13 +83,152 @@ func getTableCollationCharacterSet(db *sql.DB, database string, table string) (s
 	return characterSet, collation, nil
 }
 
+func isUnusualLatin1(value string) bool {
+	for _, r := range value {
+		if r > 255 || (r >= 128 && r <= 159) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnusualCP1252(value string) bool {
+	problematicChars := map[rune]bool{129: true, 141: true, 143: true, 144: true, 157: true}
+	for _, r := range value {
+		if r > 255 || problematicChars[r] {
+			return true
+		}
+	}
+	return false
+}
+
+func getPrimaryKeys(db *sql.DB, database, table string) ([]string, error) {
+	query := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'`
+	rows, err := db.Query(query, database, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+func scanTableForIssues(db *sql.DB, database, table string) error {
+	startTime := time.Now()
+	batchSize := 80000
+	maxRetries := 5
+	offendingIDs := make(map[string][]int) // Map to store column name -> slice of IDs
+
+	// Get primary keys
+	primaryKeys, err := getPrimaryKeys(db, database, table)
+	if err != nil {
+		return err
+	}
+	if len(primaryKeys) == 0 {
+		return fmt.Errorf("table %s has no primary key", table)
+	}
+
+	// Get the min and max IDs
+	primaryKeyStr := "`" + strings.Join(primaryKeys, "`, `") + "`"
+	var minID, maxID int
+	query := fmt.Sprintf("SELECT MIN(%s), MAX(%s) FROM %s.%s", primaryKeyStr, primaryKeyStr, database, table)
+	err = db.QueryRow(query).Scan(&minID, &maxID)
+	if err != nil {
+		return err
+	}
+
+	// Get text columns
+	columnsQuery := `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? 
+                    AND DATA_TYPE IN ('char', 'varchar', 'text', 'tinytext', 'mediumtext', 'longtext')`
+
+	columns, err := db.Query(columnsQuery, database, table)
+	if err != nil {
+		return err
+	}
+	defer columns.Close()
+
+	var columnNames []string
+	for columns.Next() {
+		var colName string
+		if err := columns.Scan(&colName); err != nil {
+			return err
+		}
+		columnNames = append(columnNames, colName)
+	}
+
+	// Process in batches
+	for start := minID; start <= maxID; start += batchSize {
+		end := start + batchSize - 1
+		if end > maxID {
+			end = maxID
+		}
+
+		for _, column := range columnNames {
+			for retry := 0; retry < maxRetries; retry++ {
+				query := fmt.Sprintf(`SELECT %s, %s FROM %s.%s WHERE %s BETWEEN ? AND ?`,
+					primaryKeyStr, column, database, table, primaryKeyStr)
+
+				rows, err := db.Query(query, start, end)
+				if err != nil {
+					if retry == maxRetries-1 {
+						return err
+					}
+					time.Sleep(time.Second * time.Duration(retry+1))
+					continue
+				}
+				defer rows.Close()
+
+				for rows.Next() {
+					var id int
+					var value sql.NullString
+					if err := rows.Scan(&id, &value); err != nil {
+						return err
+					}
+
+					if value.Valid {
+						if isUnusualLatin1(value.String) || isUnusualCP1252(value.String) {
+							offendingIDs[column] = append(offendingIDs[column], id)
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// Print results for each column with issues
+	for column, ids := range offendingIDs {
+		if len(ids) > 0 {
+			fmt.Printf("\nCurrent table: %s\n", color.BlueString(table))
+			fmt.Printf("Column: %s\n", color.BlueString(column))
+			fmt.Printf("Count of records that need to be fixed: %s\n\n", color.RedString(fmt.Sprintf("%d", len(ids))))
+			fmt.Println("Offending IDs:")
+			fmt.Printf("%v\n\n", ids)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("Time taken: %v seconds\n", elapsed.Seconds())
+	return nil
+}
+
 func main() {
 	// Parse the command line flags
 	flag.Parse()
 
 	// Check if the source flag is set
 	if *source == "" {
-		fmt.Println("Usage: go-utf8 -s <source host> [-d <database name>] [-show] [-t <table>]")
+		fmt.Println("Usage: go-utf8 -s <source host> [-d <database name>] [-show] [-t <table>] [-scan]")
 		fmt.Println("Please specify a source host")
 		os.Exit(1)
 	}
@@ -124,9 +264,29 @@ func main() {
 
 	// Check if the database flag is set
 	if *database == "" {
-		fmt.Println("Usage: go-utf8 -s <source host> -d <database name>")
+		fmt.Println("Usage: go-utf8 -s <source host> -d <database name> [-t <table>] [-scan]")
 		fmt.Println("Please specify a database name")
 		os.Exit(1)
+	}
+
+	// Handle table info request (existing behavior)
+	if *database != "" && *table != "" && !*scanTable {
+		characterSet, collation, err := getTableCollationCharacterSet(db, *database, *table)
+		if err != nil {
+			panic(err.Error())
+		}
+		fmt.Println("Default character set:", color.RedString(characterSet))
+		fmt.Println("Default collation:", color.RedString(collation))
+		fmt.Println()
+		return
+	}
+
+	// Handle specific table scanning
+	if *database != "" && *table != "" && *scanTable {
+		if err := scanTableForIssues(db, *database, *table); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	// Get a list of tables to loop through
@@ -160,7 +320,7 @@ func main() {
 			}
 
 			// Query the column for records that need to be fixed
-			query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`.`%s` WHERE LENGTH(`%s`) != CHAR_LENGTH(`%s`)", *database, tableName, columnName, columnName)
+			query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`.`%s` WHERE LENGTH(`%s`) != CHAR_LENGTH(`%s`) AND `%s` IS NOT NULL", *database, tableName, columnName, columnName, columnName)
 			var count int
 			err = db.QueryRow(query).Scan(&count)
 			if err != nil {
@@ -214,17 +374,19 @@ func main() {
 			defer rows.Close()
 
 			for rows.Next() {
-				var value string
+				var value sql.NullString
 				err := rows.Scan(&value)
 				if err != nil {
 					panic(err.Error())
 				}
 
 				// Check if the value contains non-utf8 characters
-				if !utf8.ValidString(value) {
-					fmt.Println()
-					fmt.Printf("Non-UTF8 character found in table: %s, column: %s, value: %s\n", color.BlueString(tableName), color.BlueString(columnName), color.RedString(value))
-					fmt.Println()
+				if value.Valid {
+					if !utf8.ValidString(value.String) {
+						fmt.Println()
+						fmt.Printf("Non-UTF8 character found in table: %s, column: %s, value: %s\n", color.BlueString(tableName), color.BlueString(columnName), color.RedString(value.String))
+						fmt.Println()
+					}
 				}
 
 				// Increment the progress bar
